@@ -1,13 +1,16 @@
 
 #PROJECT = example
 
+# main.o should appear first because execution will begin at the top of main.o
 #PARTS = main.o
 
 OUTDIR ?= /tmp/264
 
 CFLAGS += -Os
 
-CLFLAGS = --target plus4
+CLFLAGS = --target c16
+
+AFLAGS = -I ..
 
 LDFLAGS += -Ln $(OUTDIR)/$(PROJECT).lbl
 
@@ -28,5 +31,5 @@ reload:
 	killall -q xplus4  ;  xplus4 $(PRODUCT)
 
 clean:
-	rm -f *.o *.map $(PRODUCT)
+	rm -f *.map $(PARTS) $(PRODUCT)
 
