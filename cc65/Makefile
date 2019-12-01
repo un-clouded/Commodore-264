@@ -31,5 +31,5 @@ reload:
 	killall -q xplus4  ;  xplus4 $(PRODUCT)
 
 clean:
-	rm -f *.map $(PARTS) $(PRODUCT)
+	rm -f $(OUTDIR)/$(PROJECT).lbl $(PARTS) $(PRODUCT)
 
