@@ -8,9 +8,9 @@ OUTDIR ?= /tmp/264
 
 CFLAGS += -Os
 
-CLFLAGS = --target c16
+CLFLAGS += --target c16
 
-AFLAGS = -I ..
+AFLAGS += -I ..
 
 LDFLAGS += -Ln $(OUTDIR)/$(PROJECT).lbl
 
