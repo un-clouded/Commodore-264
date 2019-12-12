@@ -128,4 +128,5 @@ JOY2_FIRE = %10000000
 .macro init_stack
   ldx #$ff
   txs
+.endmacro
 
