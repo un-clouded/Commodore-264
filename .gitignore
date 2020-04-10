@@ -1,1 +1,6 @@
 *.o
+doc/*.html
+doc/*.js
+doc/*/*.js
+doc/*/*.html
+doc/lib/style.css
