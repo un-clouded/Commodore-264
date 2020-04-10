@@ -1,0 +1,295 @@
+#!/usr/bin/env ruby
+#
+# 2019 Nov  Copied from update-html.rb from the 'pad' project
+#
+
+require "fileutils"
+
+DOCTYPE=<<'.'
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+.
+
+PROLOGUE=<<'.'
+<html lang="en-nz">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>#{title}</title>
+    <link rel="stylesheet" href="#{path_to_root}/lib/style.css" type="text/css">
+    <script src="https://code.jquery.com/jquery-2.2.4.min.js" integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44=" crossorigin="anonymous"></script>
+    <link rel="shortcut icon" href="#{path_to_root}/lib/favicon.ico">
+  </head>
+  <body id="#{body_id}">
+  <div id="page_wrapper">
+    <div id="page">
+
+.
+
+EPILOGUE=<<'.'
+    </div>
+  </div>
+
+  <p id="footer">
+    <a href="http://validator.w3.org/check?uri=referer"><img src="#{path_to_root}/lib/valid-html401.png" alt="Valid HTML 4.01 Strict" height="31" width="88"></a>
+  </p>
+
+  </body>
+</html>
+.
+
+require 'json'
+require 'rubygems'
+require 'rdiscount'
+
+
+# Rudimentary HTML generation just to avoid the worst of things like:
+#  "<table class=\"byte\"><thead><tr>"
+#
+class Element
+
+  INLINE = %W[td th]
+
+  def initialize name, attributes
+    @name = name
+    @attributes = attributes
+    @children = []
+  end
+
+  def << child
+    @children.push  child
+  end
+
+  def html  indent_level=1
+    attributes_html = @attributes.keys.sort.map {|name|
+        value = @attributes [name]
+        %Q{%s="%s"}% [name, value]
+      }.join ", "
+    attributes_html = " " + attributes_html unless attributes_html.empty?
+    inline = INLINE.include? @name.to_s
+    indent = "  " * indent_level
+    newline = inline ? nil : "\n"
+    opening_tag = "%s<%s%s>%s"% [indent, @name, attributes_html, newline]
+    children_html = @children.map {|child| (child.is_a? Element) ? (child.html  indent_level + 1) : child}.join
+    closing_tag = "%s</%s>\n"% [(indent unless inline), @name]
+    opening_tag + children_html + closing_tag
+  end
+
+end
+
+
+def elm  name,  attributes = {},  children = []
+  # If the element has no attributes then children may be given using the
+  # attributes parameter
+  if not attributes.is_a? Hash
+    children = attributes
+    attributes = {}
+  end
+  elm = Element.new  name, attributes
+  children = [children] unless children.is_a? Array
+  children.each {|child| elm << child}
+  yield  elm  if block_given?
+  elm
+end
+
+
+input_file_path = ARGV.first
+$input_file_dir = File.dirname  input_file_path
+output_file_path = input_file_path.sub ".md", ".html"
+
+source = File.read  input_file_path
+
+params = {}
+
+# Try to work out the title of the page
+if source.match /\n# (.+)\n/
+  params["title"] = $1
+end
+
+# The "id" of the <body> should be derived from the title if unspecified
+params["body_id"] ||= params["title"].downcase.gsub(/[ ']/, "_")
+
+# Relative paths to stylesheets are used so that it can be hosted in a
+# subfolder or served from a file system
+#$path_to_root = '../' * ( input_file_path.count('/') - 1)
+levels = (input_file_path.count '/') - 0
+#$path_to_root = '../' * ( input_file_path.count('/') - 0)
+$path_to_root = (0 < levels) ? ('../' * levels)[0..-2] : '.'
+prologue = PROLOGUE
+# nested substitutions are allowed such as #{title} being "#{project}" in which
+# case #{project} needs substituting
+while true do
+  changes = 0
+  params.each_pair do |name,value|
+    changed = prologue.gsub!  '#{'+name+'}', value
+    changes += 1 unless changed.nil?
+  end
+  prologue.gsub! '#{path_to_root}', $path_to_root
+  EPILOGUE.gsub! '#{path_to_root}', $path_to_root
+  break unless 0 < changes
+end
+
+
+def highlight rel_path_to_source
+
+  path_to_source = File.join  $input_file_dir, rel_path_to_source
+  Dir.mktmpdir do |tmpdir|
+    path_to_css = File.join  tmpdir, "css"
+    html = `highlight --style zenburn --out-format=html --fragment --style-outfile #{path_to_css} #{path_to_source}`
+    css = File.read  path_to_css
+  end
+  html += <<"EOF"
+<style type="text/css">
+<!--
+#{css}
+//-->
+</style>
+EOF
+  html
+end
+
+
+# Provides Markdown for the Table of Contents of the given Markdown document.
+#
+def toc_for_markdown  markdown
+  # Find every H2
+  headings = []
+  offset = 0
+  while true do
+    offset = markdown.index %r"^## (.+?)\n", offset
+    label = $1
+    break if offset.nil?
+    headings << "\n + [#{label}](\##{label.gsub " ", "_"})"
+    offset += 1
+  end
+  headings.join
+end
+
+
+def to_html  markdown
+  markdown.gsub! '#{path_to_root}', $path_to_root
+  # Tables of contents: ~[toc]
+  markdown.gsub! /~\[toc\]/, toc_for_markdown( markdown)
+  # Terse links to other pages: [[other-page]] or \[[leave this alone]]
+  markdown.gsub!(/(.?)\[\[(.*?)\]\]/) do |match|
+    prefix = $1
+    relative_url = $2
+    if "\\" == prefix
+      "[[%s]]"% relative_url
+    else
+      relative_url.match %r{^([^/]+)}
+      page_name = $1
+      prefix+'[%s](%s.html)' % [ page_name, relative_url]
+    end
+  end
+  # Links to anchors within the same page: [#link2anch]
+  markdown.gsub!(/\[#([^\[\]]+)\]/) {|match|
+    label = $1
+    '[%s](#%s)'% [label, label.gsub(" ","_")]
+  }
+  # Footnotes: [^1#title for the note]
+  markdown.gsub! /\[\^(.*?)#(.*?)\]/, '<a href="#" title="\2" style="border-bottom:none; text-decoration:underline"><sup>\1</sup></a>'
+  # Superscripts and subscripts: ^sup^, ~sub~
+  markdown.gsub! /\^(\w+?)\^/, '<sup>\1</sup>'
+  markdown.gsub! /~(.+?)~/, '<sub>\1</sub>'
+  # Overbars for inverted signal in electronics: !RESET!
+  markdown.gsub! /!([^\!\n ]+?)!/, '<span style="border-top: 1px solid">\1</span>'
+  html = RDiscount.new( markdown).to_html
+  # Get rid of the nested <code> inside <pre>.  Whose idea was that?  ( caused the first line of the pre-formatted block to be slightly indented)
+  html.gsub! /<pre><code>/, "<pre>"
+  html.gsub! %r`</code></pre>`, "</pre>"
+  # Source highlighting for pre-formatted blocks with a `#!`
+  html.gsub! %r{<pre>#!(asm|c|conf|css|diff|html|javascript|makefile|perl|php|properties|python|ruby|sh|xml|sql|log|verilog|xorg)\n(.+?)</pre>}m do |match|
+    lang = $1
+    source = $2
+    source.gsub! "&lt;", "<"
+    source.gsub! "&gt;", ">"
+    source.gsub! "&amp;", "&"
+    if lang == "php"
+      source = "<?php\n#{ source }\n?>"
+    end
+    if lang == "verilog"
+      lang = "c"
+    end
+    highlighted = IO.popen "source-highlight --src-lang=#{lang} --out-format=html-css", "r+" do |highlighter|
+      highlighter.write  source
+      highlighter.close_write
+      highlighter.read
+    end
+    # I can't remember what this is for:
+    #highlighted.sub! /<.+?>/m, ""
+    # Remove the <?php .. ?> lines
+    highlighted.gsub! %r'<span class="symbol">(&lt;\?php|\?&gt;)</span>'m, ""
+    highlighted
+  end
+  # Special treatment for some pre-formatted blocks
+  html.gsub! %r{<pre>#!register\n(.+?)</pre>}m do |match|
+    #bits  label  description
+    #3  (dbl spc)  vsp  Vertical Screen Position (description of bit 7 through 5
+    #1  fs   Fluff (for bit 4)
+    descriptions = []
+    fields = $1.lines.map do |field|
+      field.chomp!
+      width, label, description = field.split %r"  +" # Two or more spaces, permits alignment of descriptions
+      throw "No description: #{field}" if description.nil?
+      width = width.to_i
+      descriptions.push [label, description]
+      single_bit = width == 1
+      attributes = single_bit ? {} : {:colspan=> width, :style=> "width: #{12.5 * width}%"}
+      elm :td, attributes, label
+    end
+    # fixed width cells ( as percent), td center-align (both via CSS)
+    tr = elm :tr, 7.downto(0).map{|b| elm :th, b}
+    thead = elm :thead, tr
+    tbody = elm :tbody, (elm :tr, fields)
+    bits_table = elm :table, {:class=> :register}, [thead, tbody]
+
+    cells_interlinked = descriptions.map {|label, description|
+      label_cell = elm :td, label
+      description_cell = elm :td, (to_html  description)
+      elm :tr, [label_cell, description_cell]
+    }
+    description_table = elm :table, {:class=> :register_fields}, (elm :tbody, cells_interlinked)
+
+    div = elm :div, [bits_table, description_table]
+    div.html
+  end
+  # fix up the Content-Type (for static HTML served from a file system)
+  html.gsub! /<a href=(.*?)\.pdf'>/, '<a href=\1.pdf\' type="text/pdf">'
+  html.gsub! /<a href=(.*?)\.sym'>/, '<a href=\1.sym\' type="text/vnd.geda.symbol">'
+  html.gsub! /<a href=(.*?)\.sch'>/, '<a href=\1.sch\' type="text/vnd.geda.schematic">'
+  html.gsub! /<a href=(.*?)\.fp'>/, '<a href=\1.fp\' type="text/vnd.geda.pcb-footprint">'
+  html.gsub! /<a href=(.*?)\.pcb'>/, '<a href=\1.pcb\' type="text/vnd.geda.pcb-layout">'
+  # Have to abuse the <img> tag because REXML complains when I use a custom tag
+  html.gsub!(/<img alt="highlight" src="(.+?)">/) {|match| "<pre class=\"hl\">#{highlight $1}</pre>"}
+  # Strip <tt> tags from inside <pre> tags emitted by source-highlight
+  html.gsub! %r{<pre><tt>\n(.+?)</tt></pre>}m, '<pre>\1</pre>'
+  # Strip <p> tags from around name anchors
+  html.gsub! %r{<p>(<a name=".*"></a>)</p>}, '\1'
+  # Headings should automatically have anchors
+  first = true
+  html.gsub! /(<h\d.*?>)(.+?)(<\/h\d>)/x do |match|
+    # HTML anchor names should not include spaces
+    open_tag, heading, close_tag = $1, $2, $3
+    id = heading.gsub " ", "_"
+    open_tag.sub! ">", ' class="first">' if first
+    first = false
+    %Q|<a name="#{id}"></a>\n#{open_tag}#{heading}#{close_tag}|
+  end
+  # Undo the escaping of <shell_output> tags
+  html.gsub! "&lt;shell_output&gt;\n", '<shell_output>'
+  html.gsub! "&lt;/shell_output&gt;\n", '</shell_output>'
+  html.gsub! "&lt;file_contents&gt;\n", '<file_contents>'
+  html.gsub! "&lt;/file_contents&gt;\n", '</file_contents>'
+  html
+end
+
+begin
+  temp_file_path = input_file_path + ".tmp"
+  f = File.open  temp_file_path, 'w'
+  f.write  DOCTYPE + prologue +
+      to_html( source) + "\n" + EPILOGUE
+  f.chmod 0644
+  FileUtils.mv  temp_file_path, output_file_path
+ensure
+  f.close  unless f.nil?
+end
+

@@ -1,0 +1,125 @@
+
+// https://ethanschoonover.com/solarized/
+base03 =  #002b36
+base02 =  #073642
+base01 =  #586e75
+base00 =  #657b83
+base0 =   #839496
+base1 =   #93a1a1
+base2 =   #eee8d5
+base3 =   #fdf6e3
+yellow =  #b58900
+orange =  #cb4b16
+red =     #dc322f
+magenta = #d33682
+violet =  #6c71c4
+blue =    #268bd2
+cyan =    #2aa198
+green =   #859900
+
+pale_orange = #f8fbe0
+
+paper_color = #fcfcf2
+heading_color = black
+
+table_cell_border_color = darken( pale_orange, 50%)
+table_cell_border_color = lighten( base1, 50%)
+
+base2_pale = lighten( base2, 50%)
+base2_paler = lighten( base2, 80%)
+
+
+
+mono_stack = "Mono Uralic", "Free Mono", "Courier New", Courier, monospace
+
+
+mono()
+  font-family  mono_stack
+  color  base03
+
+
+
+body
+  //background  lightgray
+  background  paper_color
+  font-family  sans-serif
+  font-size  14pt
+  line-height  1.7em
+  color  base02   // ..to make headings pop out in black
+
+p
+  margin-top  0.8em
+  margin-bottom  0.5em
+
+tr
+  td
+    >p
+      margin  0
+
+code
+  mono()
+  padding  0.15em  0.2em
+  border-radius  0.15em
+  background  base2_pale
+
+pre
+  mono()
+  margin-left  1em
+  padding  0.3em  0.15em
+  border-top  0.05em solid base1
+  border-bottom  0.05em solid base1
+  background  base2
+
+h1
+  margin-top  0.5em
+
+h2, h3
+  margin-top  4em
+
+h1, h2, h3
+  margin-bottom  1em
+  color: $heading_color
+
+table
+  border-collapse  collapse
+  tr:nth-child(odd)
+    td
+      background   base2_paler
+  th, td
+    padding-left  0.7em
+    padding-right  0.7em
+  td
+    margin  0.5em  0.5em
+  th
+    border-bottom  0.1em  solid  table_cell_border_color
+
+
+
+table.register
+  margin-top  1.6em
+  th
+    width  3em
+  td
+    border-left  0.1em solid table_cell_border_color
+    text-align  center
+    mono()
+
+table.register_fields
+  margin-top  1.6em
+  td:first-child
+    //padding-top  0.1em
+    vertical-align  top
+    mono()
+
+
+
+#page
+  max-width  64em   // Should be such that 80 columns of monospace does not wrap
+  margin  0 auto
+  padding  1em 1.5em
+  background  white
+
+#footer
+  text-align  center
+  opacity  0.1
+
