@@ -27,7 +27,7 @@ all: $(PARTS)
 	[ -e "$(OUTDIR)" ] || mkdir "$(OUTDIR)"
 	cl65 $(CLFLAGS) $(LDFLAGS) -o $(PRODUCT) $(PARTS)  &&  od65 --dump-segsize $(PARTS)
 
-reload:
+reload: all
 	killall -q xplus4  ;  xplus4 $(PRODUCT)
 
 clean:
